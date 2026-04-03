@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MEDET EVENT SHOW</title>
+  <style>
+    body {
+      margin: 0; padding: 0; height: 100vh; background: #000; color: #fff;
+      font-family: 'Impact', sans-serif; overflow: hidden; text-align: center;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    h1 { font-size: 3.8rem; text-shadow: 0 0 40px #ff00ff, 0 0 80px #00ffff; }
+    button {
+      margin: 30px; padding: 20px 60px; font-size: 2rem; background: transparent;
+      color: #fff; border: 5px solid #fff; cursor: pointer;
+    }
+    #status { margin: 20px; font-size: 1.4rem; }
+  </style>
+</head>
+<body>
+
+  <h1>MEDET EVENT SHOW</h1>
+  <p>Для участия в световом шоу нужно разрешение на камеру</p>
+  <button id="startBtn">РАЗРЕШИТЬ И ВОЙТИ В ШОУ</button>
+  <div id="status"></div>
+
+  <script>
+    let stream = null;
+    let track = null;
+    let isTorchOn = false;
+    let strobeInterval = null;
+
+    const status = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+
+    async function startTorchStrobe() {
+      if (!track) return;
+
+      status.textContent = "Световое шоу запущено 🔥";
+
+      // Останавливаем предыдущий стробоскоп
+      if (strobeInterval) clearInterval(strobeInterval);
+
+      // Быстрый стробоскоп (рекомендую не быстрее 150-200мс, иначе браузер может заблокировать)
+      let torchState = false;
+      strobeInterval = setInterval(async () => {
+        try {
+          torchState = !torchState;
+          await track.applyConstraints({
+            advanced: [{ torch: torchState }]
+          });
+        } catch (e) {
+          console.error("Ошибка вспышки", e);
+        }
+      }, 180); // меняй скорость здесь (чем меньше — тем быстрее, но может не работать)
+    }
+
+    async function enableTorch() {
+      try {
+        status.textContent = "Запрашиваем доступ к камере...";
+
+        // Запрашиваем доступ к задней камере
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            facingMode: "environment",   // задняя камера (где обычно вспышка)
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+
+        track = stream.getVideoTracks()[0];
+
+        // Проверяем поддержку torch
+        const capabilities = track.getCapabilities();
+        if (!capabilities.torch) {
+          status.textContent = "Вспышка не поддерживается на этом устройстве";
+          return;
+        }
+
+        startBtn.style.display = "none";
+        await startTorchStrobe();
+
+      } catch (err) {
+        console.error(err);
+        if (err.name === "NotAllowedError") {
+          status.textContent = "Разрешение отклонено. Обнови страницу и разреши доступ к камере.";
+        } else {
+          status.textContent = "Ошибка: " + err.message;
+        }
+      }
+    }
+
+    // Кнопка запуска
+    startBtn.addEventListener('click', enableTorch);
+
+    // Автоматически предлагаем на мобильных (но всё равно нужно нажать кнопку для getUserMedia)
+    if (/Mobi|Android/i.test(navigator.userAgent)) {
+      status.textContent = "Нажми кнопку выше, чтобы разрешить вспышку";
+    }
+  </script>
+</body>
+</html>
